@@ -3,8 +3,8 @@
 
 # python3
 from __future__ import print_function
-from .core.compat import PY3
-from .core.paths import *
+from Plugins.Extensions.EPGGrabber.core.compat import PY3
+from Plugins.Extensions.EPGGrabber.core.paths import *
 
 from Screens.Screen import Screen
 from Components.ActionMap import ActionMap
@@ -18,11 +18,11 @@ from Screens.MessageBox import MessageBox
 from Tools.Directories import fileExists
 from Plugins.Extensions.EPGGrabber.Console2 import Console2
 from Components.config import config, getConfigListEntry, ConfigSubsection, ConfigYesNo, configfile, ConfigSelection
-import io,os,re,requests,gettext,json
 from ServiceReference import ServiceReference
 from Screens.ChoiceBox import ChoiceBox
-from enigma import gRGB,loadPNG,gPixmapPtr, RT_WRAP, ePoint, RT_HALIGN_LEFT, RT_VALIGN_CENTER, eListboxPythonMultiContent, gFont, getDesktop
+from enigma import gRGB, loadPNG, gPixmapPtr, RT_WRAP, ePoint, RT_HALIGN_LEFT, RT_VALIGN_CENTER, eListboxPythonMultiContent, gFont, getDesktop
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmap, MultiContentEntryPixmapAlphaTest
+import io, os, re, requests, gettext, json
 
 ### import class + screens from files inside plugin (Python3)
 from .skin import *
@@ -120,8 +120,10 @@ class EPGGrabber(Screen):
         self.provList=list ## New from mf to make choose list
         Screen.__init__(self, session)
         self.skinName = ["EPGGrabber"]
+        
         self["status"] = Label()
         self["glb"] = Label()
+        self["epgTitle"] = Label(_('Select providers to install and press red button'))
         #self["config"] = MenuList(list)
         self["config"] = MenuList([], enableWrapAround=True, content=eListboxPythonMultiContent)
         self.update()
@@ -207,6 +209,7 @@ class EPGGrabber(Screen):
             choices.append(("Press Ok to [Disable checking for Online Update]","disablecheckUpdate"))
         choices.append(("Assign Service to channel","sref"))
         choices.append(("Download The Latest Channels List","config"))
+        choices.append(("Hide/Show Provider","hide"))
         self.session.openWithCallback(self.choicesback, ChoiceBox, _('Select Task'),choices)
 
     def choicesback(self, select):
@@ -244,7 +247,10 @@ class EPGGrabber(Screen):
             elif select[1]=="config":
                 self.session.open(Console2,_("EPG Configs") , ["python /usr/lib/enigma2/python/Plugins/Extensions/EPGGrabber/core/configs.py"], closeOnSuccess=False)
 
-    
+            elif select[1]=="hide":
+                from Plugins.Extensions.EPGGrabber.hide import HideProv
+                self.session.open(HideProv)
+                
     def check_dirs(self):
         import os
         if not os.path.isdir('/etc/epgimport/ziko_epg'):
@@ -352,7 +358,6 @@ class EPGGrabber(Screen):
                     elif provName=='dstvback':
                         self.check_date(js['master'],provName)
                         self["status"].setText('Last commit : {}'.format(js['master']))
-                     
                     else:
                         self["status"].setText("")
     
