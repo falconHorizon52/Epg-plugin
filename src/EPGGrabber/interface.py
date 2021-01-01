@@ -23,6 +23,7 @@ from Screens.ChoiceBox import ChoiceBox
 from enigma import gRGB, loadPNG, gPixmapPtr, RT_WRAP, ePoint, RT_HALIGN_LEFT, RT_VALIGN_CENTER, eListboxPythonMultiContent, gFont, getDesktop
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmap, MultiContentEntryPixmapAlphaTest
 import io, os, re, requests, gettext, json
+from Plugins.Extensions.EPGGrabber.core.epg_db import CreateDB 
 
 ### import class + screens from files inside plugin (Python3)
 from .skin import *
@@ -111,16 +112,11 @@ class EPGGrabber(Screen):
                 self.skin = SKIN_EPGGrabber_Full_HD
             else:
                 self.skin = SKIN_EPGGrabber_Full_FHD
-        list = []
-        self.installList=[] ## New from mf to make choose list
         
-        for i in range(len(DataJs()['bouquets'])):
-            list.append((DataJs()["bouquets"][i]["title"],i,DataJs()['bouquets'][i]["bouquet"]))
-            
-        self.provList=list ## New from mf to make choose list
         Screen.__init__(self, session)
         self.skinName = ["EPGGrabber"]
-        
+        self.epg_db = CreateDB()
+        self.init()
         self["status"] = Label()
         self["glb"] = Label()
         self["epgTitle"] = Label(_('Select providers to install and press red button'))
@@ -141,8 +137,24 @@ class EPGGrabber(Screen):
             "green": self.keyGreen,
             "cancel": self.close,
         }, -1)
+        
+        
         self.onShown.append(self.onWindowShow)
       
+    
+    def init(self):
+        list = []
+        self.installList=[]
+  
+        rows = self.epg_db.get_rows('select * from epg_prov where is_visible = 1 order by title')
+        
+        table = rows.fetchall()
+        
+        for i in range(len(table)):
+            list.append((table[i][1],i,table[i][0],table[i][2]))
+        
+        self.provList=list   
+    
     def onWindowShow(self):
         self.onShown.remove(self.onWindowShow)
         self.new_version = Ver
@@ -234,7 +246,7 @@ class EPGGrabber(Screen):
                 configfile.save()
             elif select[1]=='sref':
                 from Plugins.Extensions.EPGGrabber import assign
-                servicelist=None
+                servicelist = None
                 global Servicelist
                 import Screens.InfoBar
                 Servicelist = servicelist or Screens.InfoBar.InfoBar.instance.servicelist
@@ -248,8 +260,8 @@ class EPGGrabber(Screen):
                 self.session.open(Console2,_("EPG Configs") , ["python /usr/lib/enigma2/python/Plugins/Extensions/EPGGrabber/core/configs.py"], closeOnSuccess=False)
 
             elif select[1]=="hide":
-                from Plugins.Extensions.EPGGrabber.hide import HideProv
-                self.session.open(HideProv)
+                from Plugins.Extensions.EPGGrabber.hide_interface import HideProv
+                self.session.openWithCallback(self.update,HideProv)
                 
     def check_dirs(self):
         import os
@@ -322,44 +334,37 @@ class EPGGrabber(Screen):
                     return json.loads(f.read())
                 except ValueError:
                     os.remove(API_PATH+'/epg_status.json')
+                    return None
         else:
             return None
         
-    def update(self):
+    def update(self,ret=False):
         index=self['config'].getSelectionIndex()
-        returnValue=self.provList[index][1]
-        
+        self["glb"].setText("Last update : {}".format(self.provList[index][3]))
+        provName = self.provList[index][2]
         js = self.readJs()
-        for i in range(len(self.provList)):
-            if returnValue == i:
-                with open(PROVIDERS_ROOT, 'r') as json_file:
-                    data = json.load(json_file)
-                provName = self.provList[i][2]
-                for channel in data['bouquets']:
-                    if channel["bouquet"]==provName:
-                        self["glb"].setText("Last update : {}".format(channel["date"]))
-                if js != None:
-                    if provName=="osnplay":
-                        self.check_date(js['osn'],provName)
-                        self["status"].setText('Last commit : {}'.format(js['osn']))
-                        
-                    elif provName=='osnar':
-                        self.check_date(js['FullArabicXML'],provName)
-                        self["status"].setText('Last commit : {}'.format(js['FullArabicXML']))
-                        
-                    elif provName=='osnen':
-                        self.check_date(js['FullEnglishXML'],provName)
-                        self["status"].setText('Last commit : {}'.format(js['FullEnglishXML']))
-                        
-                    elif provName=='jawwy' or provName=='jawwyen':
-                        self.check_date(js['jawwy'],provName)
-                        self["status"].setText('Last commit : {}'.format(js['jawwy']))
-                        
-                    elif provName=='dstvback':
-                        self.check_date(js['master'],provName)
-                        self["status"].setText('Last commit : {}'.format(js['master']))
-                    else:
-                        self["status"].setText("")
+        if js:
+            if provName=="osnplay":
+                self.check_date(js['osn'],provName)
+                self["status"].setText('Last commit : {}'.format(js['osn']))
+                
+            elif provName=='osnar':
+                self.check_date(js['FullArabicXML'],provName)
+                self["status"].setText('Last commit : {}'.format(js['FullArabicXML']))
+                
+            elif provName=='osnen':
+                self.check_date(js['FullEnglishXML'],provName)
+                self["status"].setText('Last commit : {}'.format(js['FullEnglishXML']))
+                
+            elif provName=='jawwy' or provName=='jawwyen':
+                self.check_date(js['jawwy'],provName)
+                self["status"].setText('Last commit : {}'.format(js['jawwy']))
+                
+            elif provName=='dstvback':
+                self.check_date(js['master'],provName)
+                self["status"].setText('Last commit : {}'.format(js['master']))
+            else:
+                self["status"].setText("")
     
     def check_date(self,data,provName):
         from datetime import datetime,timedelta
